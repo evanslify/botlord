@@ -10,7 +10,9 @@ scrapyd_uri = 'http://localhost:6800/schedule.json'
 
 def add_job(username, domain, project):
 
-    payload = {'project': project, 'username': username, 'spider': domain}
+    _job = get_current_job()
+
+    payload = {'project': project, 'username': username, 'spider': domain, 'jobid': _job.id}
     req = urllib2.urlopen(scrapyd_uri, data=urllib.urlencode(payload))
     if req.getcode() != 200:
         raise Exception

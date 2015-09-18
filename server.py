@@ -37,7 +37,7 @@ class StorageEngine(object):
 
     def job_finished(self, jobid):
         try:
-            job = self.q.fetch_job(jobid)
+            job = self.q.fetch_job(str(jobid))
             job.meta['status'] = 'done'
             job.save()
             result = {'status': 'ok', 'jobid': job.id}
@@ -169,15 +169,19 @@ class ThingsResource(object):
         self.db = db
         self.logger = logging.getLogger('thingsapp.' + __name__)
 
-    def on_get(self, req, resp, username, domain):
+    def on_post(self, req, resp):
         #  marker = req.get_param('marker') or ''
         #  limit = req.get_param_as_int('limit') or 50
 
         #  username = req.get_param('username')
         #  domain = req.get_param('domain')
+        jr = req.context['doc']
+        username = jr['username']
+        domain = jr['domain']
+        project = jr.get('project', 'fetch')
 
         try:
-            result = self.db.add_job(username, domain, 'fetch')
+            result = self.db.add_job(username, domain, project)
         except Exception as ex:
             self.logger.error(ex)
 
@@ -206,7 +210,12 @@ class FinishedJobResource(object):
         self.db = db
         self.logger = logging.getLogger('thingsapp.' + __name__)
 
-    def on_get(self, req, resp, jobid):
+    @falcon.before(max_body(64 * 1024))
+    def on_post(self, req, resp):
+        jr = req.context['doc']
+
+        jobid = jr['jobid']
+        #  status = jr['status']
         #  marker = req.get_param('marker') or ''
         #  limit = req.get_param_as_int('limit') or 50
 
@@ -248,8 +257,8 @@ db = StorageEngine()
 things = ThingsResource(db)
 finished = FinishedJobResource(db)
 
-app.add_route('/lord/finished/{jobid}', finished)
-app.add_route('/lord/add/{username}/{domain}', things)
+app.add_route('/lord/finished', finished)
+app.add_route('/lord/add', things)
 
 # If a responder ever raised an instance of StorageError, pass control to
 # the given handler.
