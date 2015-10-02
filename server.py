@@ -10,26 +10,36 @@ import falcon
 from rq import Queue
 import control
 import redis
+import subprocess
+import shlex
+
+from misc import loadconfig
 
 
 class StorageEngine(object):
 
     def __init__(self):
-        redis_pw = (
-            '1955747fb39e1e6e7175dd6694f14db01280bf0ef4ce09617a7e590f0004998035712f13b3143e51f23c1cc9cea1977e560a3a1b2fd00f706d64e49a280c7ebb')
-        redis_conn = redis.StrictRedis(password=redis_pw, db=1)
+        self.config = loadconfig()
+        redis_pw = self.config.get('redis', 'redis_password')
+        redis_port = self.config.get('redis', 'redis_port')
+        redis_uri = self.config.get('redis', 'redis_uri')
+        redis_db = self.config.get('redis', 'redis_db')
+
+        redis_conn = redis.StrictRedis(
+            host=redis_uri, port=redis_port, password=redis_pw, db=redis_db)
+
         self.q = Queue(connection=redis_conn)  # no args implies the default queue
 
-    #  def get_things(self, marker, limit):
-        #  return [{'id': str(uuid.uuid4()), 'color': 'green'}]
-
-    #  def add_thing(self, thing):
     def add_job(self, username, domain, project):
         try:
             job = self.q.enqueue_call(
                 func=control.add_job,
                 args=(username, domain, project),
                 timeout=600)
+            # runner2 = worker.work(burst=True)
+            # -> will destroy itself when job is done :)
+            command = 'python ./runner2.py'
+            subprocess.Popen(shlex.split(command))
             result = {'status': 'ok', 'jobid': job.id}
         except Exception:
             raise StorageError
@@ -58,51 +68,6 @@ class StorageError(Exception):
                                description)
 
 
-#  class SinkAdapter(object):
-
-    #  engines = {
-        #  'ddg': 'https://duckduckgo.com',
-        #  'y': 'https://search.yahoo.com/search',
-    #  }
-
-    #  def __call__(self, req, resp, engine):
-        #  url = self.engines[engine]
-        #  params = {'q': req.get_param('q', True)}
-        #  result = requests.get(url, params=params)
-
-        #  resp.status = str(result.status_code) + ' ' + result.reason
-        #  resp.content_type = result.headers['content-type']
-        #  resp.body = result.text
-
-
-#  class AuthMiddleware(object):
-
-    #  def process_request(self, req, resp):
-        #  # disabled
-        #  token = req.get_header('X-Auth-Token', '1')
-        #  project = req.get_header('X-Project-ID', '1')
-
-        #  if token is None:
-            #  description = ('Please provide an auth token '
-                           #  'as part of the request.')
-
-            #  raise falcon.HTTPUnauthorized('Auth token required',
-                                          #  description,
-                                          #  href='http://docs.example.com/auth')
-
-        #  if not self._token_is_valid(token, project):
-            #  description = ('The provided auth token is not valid. '
-                           #  'Please request a new token and try again.')
-
-            #  raise falcon.HTTPUnauthorized('Authentication required',
-                                          #  description,
-                                          #  href='http://docs.example.com/auth',
-                                          #  scheme='Token; UUID')
-
-    #  def _token_is_valid(self, token, project):
-        #  return True  # Suuuuuure it's valid...
-
-
 class RequireJSON(object):
 
     def process_request(self, req, resp):
@@ -119,10 +84,6 @@ class RequireJSON(object):
 class JSONTranslator(object):
 
     def process_request(self, req, resp):
-        # req.stream corresponds to the WSGI wsgi.input environ variable,
-        # and allows you to read bytes from the request body.
-        #
-        # See also: PEP 3333
         if req.content_length in (None, 0):
             # Nothing to do
             return
@@ -170,11 +131,6 @@ class ThingsResource(object):
         self.logger = logging.getLogger('thingsapp.' + __name__)
 
     def on_post(self, req, resp):
-        #  marker = req.get_param('marker') or ''
-        #  limit = req.get_param_as_int('limit') or 50
-
-        #  username = req.get_param('username')
-        #  domain = req.get_param('domain')
         jr = req.context['doc']
         username = jr['username']
         domain = jr['domain']
@@ -215,12 +171,6 @@ class FinishedJobResource(object):
         jr = req.context['doc']
 
         jobid = jr['jobid']
-        #  status = jr['status']
-        #  marker = req.get_param('marker') or ''
-        #  limit = req.get_param_as_int('limit') or 50
-
-        #  username = req.get_param('username')
-        #  domain = req.get_param('domain')
 
         try:
             result = self.db.job_finished(jobid)
@@ -264,11 +214,6 @@ app.add_route('/lord/add', things)
 # the given handler.
 app.add_error_handler(StorageError, StorageError.handle)
 
-# Proxy some things to another service; this example shows how you might
-# send parts of an API off to a legacy system that hasn't been upgraded
-# yet, or perhaps is a single cluster that all data centers have to share.
-#  ink = SinkAdapter()
-#  app.add_sink(sink, r'/search/(?P<engine>ddg|y)\Z')
 
 # Useful for debugging problems in your API; works with pdb.set_trace()
 if __name__ == '__main__':

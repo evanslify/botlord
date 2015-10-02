@@ -8,6 +8,7 @@ import urllib2
 
 scrapyd_uri = 'http://localhost:6800/schedule.json'
 
+
 def add_job(username, domain, project):
 
     _job = get_current_job()
@@ -21,6 +22,5 @@ def add_job(username, domain, project):
         job = get_current_job()
         print 'job waiting. jobid: %s, meta: %s' % (job.id, job.meta)
         if 'status' in job.meta:
-            print 'meta found!'
             return
         time.sleep(5)
